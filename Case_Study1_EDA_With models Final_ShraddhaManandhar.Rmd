@@ -1,0 +1,519 @@
+---
+title: "Case_Study_1_EDA"
+author: "Shraddha M"
+date: "2025-11-09"
+output: pdf_document
+---
+
+
+# Executive Summary
+
+
+This report presents the **Exploratory Data Analysis (EDA)** phase of the *Online Shoppers Purchasing Intention* dataset obtained from the **UCI Machine Learning Repository**.  
+The dataset includes **12,205 unique web sessions** and **18 variables** describing user interactions, session characteristics, and purchase outcomes (`Revenue`).
+
+The goal of this analysis is to understand how **browsing behavior, engagement depth, and contextual factors** influence the likelihood of an online purchase.  
+The EDA applies **descriptive statistics**, **visualizations**, and **correlation analysis** to uncover meaningful behavioral patterns that will guide the next phase of predictive modeling.
+
+From a **business perspective**, this analysis provides insights that support:
+- **Marketing:** Identify behaviors linked to higher conversion and target high-intent visitors for remarketing.  
+- **Operations:** Optimize site performance and plan capacity around high-conversion periods.  
+- **Purchasing:** Align promotions and inventory management with seasonal demand cycles.
+
+By transforming raw browsing data into **actionable insights**, the EDA helps decision-makers determine **who to re-target, when to schedule campaigns, and what on-site elements to optimize** — reducing wasted spend on low-intent traffic and amplifying revenue through data-driven strategies.
+
+Specifically, this analysis aims to:
+- Assess data quality and structure to ensure readiness for modeling.  
+- Explore user behavior through key engagement metrics (page views, durations, bounce and exit rates).  
+- Examine categorical influences such as seasonality (`Month`), visitor type (`VisitorType`), and timing (`Weekend`).  
+- Identify relationships between variables that drive **purchasing intent**.  
+
+Each analytical step links technical findings to **business relevance**, ensuring that insights are both interpretable and actionable for cross-functional teams in marketing, operations, and purchasing.
+
+---
+
+## 1. Data Cleansing
+
+### 1.1 Load & Inspect
+```{r load}
+data <- read.csv("online_shoppers_intention.csv")
+str(data)
+summary(data)
+```
+**Explanation.**The dataset includes 12,330 observations and 18 variables describing user behavior, session environment, and purchasing outcomes.  
+Initial inspection shows that key behavioral metrics — such as `ProductRelated_Duration`, `PageValues`, and `BounceRates` — vary widely, indicating different engagement levels across users.  
+Approximately **15% of sessions resulted in a purchase**, a conversion rate typical for e-commerce sites but critical for improving **marketing efficiency and customer retention** strategies.
+
+Most visitors are **returning users** who view multiple product-related pages, while informational and administrative activity remains limited.  
+Technical factors such as **browser, operating system, and region**, combined with contextual ones like **month, weekend, and special day**, will help identify **seasonal and platform-based differences** in purchase behavior.
+
+From a business perspective, this inspection verifies that the dataset is rich enough to support:
+- **Marketing analysis:** Identifying engagement drivers and retargeting opportunities.  
+- **Operational insights:** Monitoring traffic and optimizing performance for high-engagement users.  
+- **Purchasing strategy:** Aligning promotions and stock with seasonal browsing trends.
+
+Overall, the structure confirms the dataset’s readiness for deeper analysis, while highlighting areas — such as skewed duration metrics — that will need transformation before modeling.
+
+
+### 1.2 Missingness & Duplicates
+
+```{r}
+# Check for missing values
+colSums(is.na(data))
+
+# Check for duplicate rows
+dup_n <- sum(duplicated(data))
+cat("Number of duplicate rows:", dup_n, "\n")
+
+# Examine target variable (Revenue) distribution
+table(data$Revenue)
+prop.table(table(data$Revenue))
+```
+
+
+
+**Explanation.** The dataset shows **no missing values**, confirming consistent data collection across all 18 variables.  
+A total of **125 duplicate sessions** were identified and removed to ensure that each record represents a **unique visitor interaction**.  
+This cleanup step improves the reliability of summary statistics and ensures that engagement metrics are not artificially inflated.
+
+The target variable (`Revenue`) shows that approximately **15.5% of sessions resulted in a purchase**, reflecting a typical e-commerce conversion rate.  
+This mild class imbalance highlights that most sessions do not lead to a purchase — an important factor to address during modeling through **resampling or class-weight adjustments**.
+
+From a business view, these checks confirm a **high-quality, trustworthy dataset** suitable for analysis.  
+It ensures that future insights about customer engagement and conversion behavior will be **accurate and unbiased**, supporting confident decision-making in **marketing and operations**.
+
+
+### 1.3 De-duplicate & Set Categorical Types
+```{r dedup-factors}
+data <- data[!duplicated(data), ]
+
+data$Month            <- as.factor(data$Month)
+data$VisitorType      <- as.factor(data$VisitorType)
+data$Weekend          <- as.factor(data$Weekend)
+data$Revenue          <- as.factor(data$Revenue)
+data$OperatingSystems <- as.factor(data$OperatingSystems)
+data$Browser          <- as.factor(data$Browser)
+data$Region           <- as.factor(data$Region)
+data$TrafficType      <- as.factor(data$TrafficType)
+
+str(data)
+```
+**Explanation.**After removing 125 duplicate sessions, the dataset now contains **12,205 unique observations**, ensuring that each record represents a distinct user visit.  
+This improves the accuracy of subsequent analysis and prevents repeated browsing sessions from distorting engagement metrics.
+
+All categorical variables (`Month`, `VisitorType`, `Weekend`, `Revenue`, `OperatingSystems`, `Browser`, `Region`, and `TrafficType`) were converted to **factors** to ensure proper handling in visualization and modeling.  
+This step allows R to correctly group, summarize, and interpret these fields as **qualitative categories** rather than numerical values.
+
+From a data integrity perspective, this confirms the dataset is **clean, well-structured, and ready for exploratory analysis**.  
+From a business perspective, this ensures that insights drawn from patterns in **seasonality, visitor type, and platform usage** will be accurate and actionable for **marketing and operational planning**.
+
+---
+
+## 2. Data Profiling
+
+### 2.1 Numeric Summary
+```{r num-sum}
+numeric_vars <- sapply(data, is.numeric)
+numeric_data <- data[, numeric_vars]
+summary(numeric_data)
+```
+**Explanation.** The numeric summary highlights **clear variation in user engagement** across sessions.  
+Most users view only a few pages and spend little time browsing, while a smaller subset of visitors explore products in depth, creating a **right-skewed distribution** typical of e-commerce behavior.
+
+`BounceRates` and `ExitRates` remain low on average, showing that many visitors leave quickly after minimal interaction.  
+Meanwhile, `PageValues` has a median of 0 but occasional high values, indicating that a small group of **high-value sessions** drives most purchase potential.
+
+These findings point to two key behavioral segments: **casual browsers** and **high-intent shoppers**.  
+Recognizing this divide will help marketing teams tailor remarketing campaigns and guide future predictive modeling to focus on **engagement depth as a primary driver of conversions**.
+
+
+### 2.2 Outliers & Skewness Check
+```{r outlier}
+boxplot(data$ProductRelated_Duration, main="ProductRelated_Duration (raw)")
+quantile(data$ProductRelated_Duration, probs = c(.95, .99, .999))
+```
+**Explanation.** The boxplot and quantile analysis confirm a **strong right-skew** in `ProductRelated_Duration`, where most sessions are short but a few extend far beyond the average.  
+These long-duration sessions represent **highly engaged users** who spend considerable time exploring products — valuable for understanding purchase intent but potentially distorting summary statistics.
+
+To maintain interpretive accuracy, duration and value-related variables will be **log-transformed** in the modeling phase.  
+This adjustment minimizes the influence of extreme observations while preserving their importance for identifying **high-value engagement behavior**.
+
+
+### 2.3 Distributions (Key Metrics)
+```{r hist, fig.height=4, fig.width=6}
+library(ggplot2)
+num_cols <- c("Administrative_Duration","Informational_Duration",
+              "ProductRelated_Duration","BounceRates","ExitRates","PageValues")
+for (col in num_cols) {
+  print(
+    ggplot(data, aes(x = .data[[col]])) +
+      geom_histogram(fill="steelblue", color="white", bins=30) +
+      labs(title=paste("Distribution of", col), x=col, y="Count")
+  )
+}
+```
+**Explanation.** The histograms reveal that most users spend **very little time** on administrative and product-related pages, while a smaller group of sessions last much longer, resulting in **right-skewed distributions** across all duration variables.  
+`BounceRates` and `ExitRates` are concentrated near zero, with only a few sessions approaching the 0.20 upper limit, reflecting **quick exits or minimal engagement**.
+
+This pattern confirms that a large share of visitors browse briefly, while a smaller, **highly engaged segment** drives most on-site interaction and purchase activity.  
+Understanding these behavioral differences helps businesses **target returning, high-engagement users** and design strategies to **reduce bounce and increase exploration** among casual visitors.
+
+
+### 2.4 Near-Zero Variance
+```{r nzv}
+library(caret)
+nzv <- caret::nearZeroVar(numeric_data, saveMetrics = TRUE)
+nzv[nzv$nzv, , drop = FALSE]
+```
+**Explanation.**The near-zero variance analysis identified `SpecialDay` as a **low-variability feature**, meaning it changes very little across sessions.  
+While it represents proximity to special events or holidays, its limited variation suggests that it may have **minimal predictive power** for purchase behavior.
+
+This variable will be retained for completeness but **monitored during modeling**.  
+If it contributes little to predictive accuracy, it may be excluded to simplify the model and improve overall interpretability.
+
+---
+
+## 3. Relationship Identification
+
+### 3.1 Purchase Rate by Categorical Factors
+```{r cat-rate, fig.height=4, fig.width=6}
+# Month
+ggplot(data, aes(x = Month, fill = Revenue)) +
+  geom_bar(position = "fill") +
+  labs(title="Purchase Rate by Month", x="Month", y="Proportion")
+
+# VisitorType
+ggplot(data, aes(x = VisitorType, fill = Revenue)) +
+  geom_bar(position = "fill") +
+  labs(title="Purchase Rate by Visitor Type", x="Visitor Type", y="Proportion")
+
+# Weekend
+ggplot(data, aes(x = Weekend, fill = Revenue)) +
+  geom_bar(position = "fill") +
+  labs(title="Purchase Rate by Weekend vs Weekday", x="Weekend", y="Proportion")
+```
+**Explanation.** Purchase behavior varies noticeably across categorical factors.  
+**November and October** show the highest purchase rates, reflecting seasonal campaigns and pre-holiday shopping activity.  
+In contrast, early-year months like **February and March** show the lowest conversions, aligning with slower retail cycles.
+
+**Returning visitors** account for most sessions and have a higher likelihood of purchasing compared to new or occasional visitors, underscoring the importance of **customer retention and loyalty programs**.  
+Purchases occur at similar rates on **weekends and weekdays**, indicating steady demand throughout the week rather than time-specific spikes.
+
+Overall, seasonality and visitor type appear to have stronger influences on conversion than timing alone, providing opportunities to **focus marketing efforts on repeat customers** and **align promotions with high-conversion periods**.
+
+
+### 3.2 Month Ranking by Conversion (Business View)
+```{r month-ordered, fig.height=4.5, fig.width=6.5}
+library(dplyr)
+data %>%
+  group_by(Month, Revenue) %>%
+  summarise(n = n(), .groups="drop") %>%
+  group_by(Month) %>%
+  mutate(prop = n/sum(n)) %>%
+  filter(Revenue=="TRUE") %>%
+  arrange(desc(prop)) %>%
+  ggplot(aes(x = reorder(Month, prop), y = prop)) +
+  geom_col(fill="steelblue") +
+  coord_flip() +
+  labs(title="Purchase Rate by Month (ordered)", x="Month", y="Purchase Proportion")
+```
+**Explanation.** The ranked view of monthly conversion rates highlights **November** as the peak month for purchases, followed by **October, September, and August** — aligning with holiday promotions and seasonal sales periods.  
+Early-year months such as **February and March** show the lowest conversion rates, suggesting reduced consumer engagement during off-peak seasons.
+
+This seasonal pattern underscores clear **demand cycles** that can guide marketing and inventory decisions.  
+Businesses should **prioritize promotional campaigns, stock planning, and remarketing efforts** in high-conversion months (Q3–Q4) while optimizing advertising spend during slower months to improve efficiency.
+
+
+### 3.3 Correlation (Numeric Features)
+```{r corr, fig.height=6, fig.width=7}
+library(corrplot)
+cm <- cor(numeric_data)
+corrplot(cm, method="color", type="upper", tl.col="black", tl.srt=45,
+         title="Correlation Matrix of Numeric Features", mar=c(0,0,1,0))
+```
+**Explanation.** The correlation matrix reveals strong **positive relationships** between page counts and their corresponding durations — for example, `ProductRelated` and `ProductRelated_Duration` — confirming that users who view more pages also spend longer on them.  
+`BounceRates` and `ExitRates` are **moderately correlated**, suggesting that sessions with quick exits tend to have higher bounce activity.  
+Meanwhile, `PageValues` shows positive correlations with product-related metrics and negative associations with bounce behavior, indicating that **engaged browsing directly contributes to purchase potential**.
+
+No variables show excessive collinearity, meaning all can be retained for modeling while monitoring for redundancy.  
+From a business standpoint, this analysis reinforces that **deeper engagement (longer browsing, more product views)** is strongly tied to revenue, providing a clear behavioral target for marketing optimization.
+
+
+### 3.4 High-Correlation Flag (Defensive Check)
+```{r high-corr}
+hi <- which(abs(cm) >= 0.9 & abs(cm) < 1, arr.ind = TRUE)
+hc_tbl <- unique(data.frame(var1 = rownames(cm)[hi[,1]],
+                            var2 = colnames(cm)[hi[,2]],
+                            r   = round(cm[hi], 3)))
+hc_tbl
+```
+
+**Explanation.** A high-correlation check identified one strong relationship between BounceRates and ExitRates (r = 0.90), confirming that both capture similar user-exit behavior.  
+While they describe related aspects of disengagement, they differ slightly — `BounceRates` reflect single-page exits, while `ExitRates` capture drop-offs from any page.
+
+Both variables will be retained for now, as each may provide **unique behavioral insight** into user interaction patterns.  
+However, one may be removed during modeling if it contributes **redundant information or multicollinearity**, ensuring model stability and interpretability.
+
+---
+
+## 4. EDA Conclusions 
+
+**Data Cleansing:**  
+The dataset is complete, consistent, and free of missing values after removing 125 duplicate sessions.  
+All categorical variables were properly typed, ensuring accurate grouping and aggregation.  
+
+**Data Profiling:**  
+Numeric variables show **right-skewed engagement patterns** with a few highly active users driving most interactions.  
+Outliers were detected in duration and value-related fields, supporting the use of **log transformations** in modeling.  
+The `SpecialDay` feature showed near-zero variance and will be monitored for limited predictive power.
+
+**Relationship Identification:**  
+Conversion rates are highest among **returning visitors** and in **Q3–Q4 months** (especially November and October), emphasizing strong **seasonal and loyalty effects**.  
+`BounceRates` and `ExitRates` are highly correlated but describe different user-exit stages, and engagement metrics (`ProductRelated`, `PageValues`) strongly link to purchasing intent.
+
+**Business Takeaway:**  
+EDA findings highlight that **user engagement depth** and **visitor loyalty** are key predictors of purchase likelihood.  
+Businesses can leverage these insights to:
+- Focus **remarketing and retention campaigns** on returning, high-engagement users.  
+- **Time promotions and inventory** for high-conversion months.  
+- Enhance the **user experience (UX)** to reduce bounce and encourage deeper exploration.
+
+---
+
+## Next Steps (Transition to Modeling)
+
+1. **Feature Transformation:**  
+   Apply log transformations to right-skewed numeric variables (e.g., `ProductRelated_Duration`, `PageValues`) and standardize numeric features.
+
+2. **Data Splitting:**  
+   Create a **stratified train/test split** preserving the ~15.5% purchase rate to maintain class balance.
+
+3. **Model Evaluation:**  
+   Build and compare **Logistic Regression** (baseline interpretability) and **Random Forest** (nonlinear accuracy).  
+   Evaluate performance using **AUC, precision, recall, and F1-score** to balance interpretability and predictive power.
+
+4. **Business Implementation:**  
+   Translate modeling results into **actionable strategies** — targeted marketing campaigns, seasonal stock planning, and UX improvements to reduce bounce and increase conversions.
+
+------------------------------------------------------------------------------
+#### Model Findings 
+--------------------------------------------------------------------------------
+
+### Setup: Packages & Target Variable
+
+```{r}
+library(caret)
+library(randomForest)
+library(pROC)
+library(dplyr)
+
+set.seed(123)  # for reproducibility
+
+data <- read.csv("online_shoppers_intention.csv")
+
+# basic factor conversion only if not already done
+data$Revenue <- factor(data$Revenue)  # keep TRUE/FALSE for now
+# no relevel() here
+
+
+```
+#### Log Transform Skewed Numeric Variables
+
+```{r}
+
+# Variables to log-transform (from EDA findings)
+log_vars <- c("Administrative_Duration",
+              "Informational_Duration",
+              "ProductRelated_Duration",
+              "PageValues")
+
+# Create log-transformed versions (log1p handles zeros safely)
+for (v in log_vars) {
+  new_name <- paste0(v, "_log")
+  data[[new_name]] <- log1p(data[[v]])
+}
+
+# Build modeling dataset using transformed variables + key predictors
+model_data <- dplyr::select(
+  data,
+  Revenue,
+  Administrative,
+  Informational,
+  ProductRelated,
+  BounceRates,
+  ExitRates,
+  SpecialDay,
+  Administrative_Duration_log,
+  Informational_Duration_log,
+  ProductRelated_Duration_log,
+  PageValues_log,
+  Month, OperatingSystems, Browser, Region, TrafficType,
+  VisitorType, Weekend
+)
+
+str(model_data)
+
+
+```
+
+### Tain/ Test Split (stratified by revenue)
+
+```{r}
+set.seed(123)
+
+# Fix Revenue factor levels BEFORE splitting
+model_data$Revenue <- factor(
+  model_data$Revenue,
+  levels = c("FALSE", "TRUE"),
+  labels = c("no", "yes")
+)
+
+
+train_index <- caret::createDataPartition(model_data$Revenue,
+                                          p = 0.7,   # 70% train, 30% test
+                                          list = FALSE)
+
+train_data <- model_data[train_index, ]
+test_data  <- model_data[-train_index, ]
+
+prop.table(table(train_data$Revenue))
+prop.table(table(test_data$Revenue))  # check stratification
+
+levels(train_data$Revenue)
+levels(test_data$Revenue)
+```
+
+#### Train Control(CV+Class Probs +ROC)
+
+```{r}
+library(caret)
+library(pROC)
+library(randomForest)
+library(dplyr)
+set.seed(123)
+
+ctrl <- trainControl(
+  method = "repeatedcv",
+  number = 5,
+  repeats = 3,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary,  # gives ROC, Sens, Spec
+  savePredictions = "final"
+ 
+)
+
+```
+
+#### Logistic Regression Model
+
+
+```{r}
+
+set.seed(123)
+
+logit_fit <- train(
+  Revenue ~ .,
+  data = train_data,
+  method = "glm",
+  family = binomial,
+  trControl = ctrl,
+  metric = "ROC",               # optimize for AUC
+  preProcess = c("center", "scale")  # standardize numeric predictors
+)
+
+logit_fit
+
+```
+
+#### Random Forest Model
+
+```{r}
+set.seed(123)
+
+rf_fit <- train(
+  Revenue ~ .,
+  data = train_data,
+  method = "rf",
+  trControl = ctrl,
+  metric = "ROC",
+  tuneLength = 5   # caret will try a few mtry values
+)
+
+rf_fit
+plot(rf_fit)
+
+```
+
+#### Prediction on Test Set
+
+```{r}
+
+# Logistic regression predictions
+logit_prob  <- predict(logit_fit, newdata = test_data, type = "prob")[, "yes"]
+logit_class <- predict(logit_fit, newdata = test_data, type = "raw")
+
+
+# Random forest predictions
+rf_prob  <- predict(rf_fit, newdata = test_data, type = "prob")[, "yes"]
+rf_class <- predict(rf_fit, newdata = test_data, type = "raw")
+
+# Check levels to be sure
+levels(test_data$Revenue)
+
+```
+
+#### Evaluation Functions (Accuracy, Precision, Recall, F1, AUC)
+
+```{r}
+# Helper function to compute precision, recall, F1
+classification_metrics <- function(truth, pred, positive = "yes") {
+  cm <- caret::confusionMatrix(pred, truth, positive = positive)
+  acc <- cm$overall["Accuracy"]
+  prec <- cm$byClass["Precision"]
+  rec <- cm$byClass["Recall"]
+  f1 <- cm$byClass["F1"]
+  c(Accuracy = acc, Precision = prec, Recall = rec, F1 = f1)
+}
+
+# Logistic regression metrics
+cm_logit <- confusionMatrix(logit_class, test_data$Revenue, positive = "yes")
+cm_logit
+
+metrics_logit <- classification_metrics(test_data$Revenue, logit_class)
+metrics_logit
+
+roc_logit <- pROC::roc(response = test_data$Revenue,
+                       predictor = logit_prob,
+                       levels = c("no", "yes"),
+                       direction = "<")
+auc_logit <- pROC::auc(roc_logit)
+auc_logit
+
+# Random forest metrics
+cm_rf <- confusionMatrix(rf_class, test_data$Revenue, positive = "yes")
+cm_rf
+
+metrics_rf <- classification_metrics(test_data$Revenue, rf_class)
+metrics_rf
+
+roc_rf <- pROC::roc(response = test_data$Revenue,
+                    predictor = rf_prob,
+                    levels = c("no", "yes"),
+                    direction = "<")
+auc_rf <- pROC::auc(roc_rf)
+auc_rf
+
+```
+
+#### Comparing models side by side
+
+```{r}
+model_comparison <- rbind(
+  Logistic_Regression = c(metrics_logit, AUC = as.numeric(auc_logit)),
+  Random_Forest       = c(metrics_rf,   AUC = as.numeric(auc_rf))
+)
+
+model_comparison
+
+```
+
